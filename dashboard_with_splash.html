@@ -1,0 +1,1138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SentientAI — Sentiment Analysis Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --lime: #ccff00;
+    --lime-glow: rgba(204,255,0,0.25);
+    --lime-faint: rgba(204,255,0,0.08);
+    --emerald: #10b981;
+    --obsidian: #0c0c0c;
+    --black: #000;
+    --glass-bg: rgba(255,255,255,0.03);
+    --glass-border: rgba(255,255,255,0.1);
+    --glass-blur: blur(16px);
+    --text: #ebebeb;
+    --text-60: rgba(235,235,235,0.6);
+    --text-30: rgba(235,235,235,0.3);
+    --red: #ff4d4d;
+    --red-faint: rgba(255,77,77,0.1);
+  }
+
+  html, body {
+    background: var(--black);
+    color: var(--text);
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 14px;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* noise overlay */
+  body::before {
+    content: '';
+    position: fixed; inset: 0; z-index: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    opacity: 0.04;
+    pointer-events: none;
+  }
+
+  /* grid bg */
+  body::after {
+    content: '';
+    position: fixed; inset: 0; z-index: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+    background-size: 60px 60px;
+    pointer-events: none;
+  }
+
+  /* glow spheres */
+  .glow-sphere {
+    position: fixed; border-radius: 50%; pointer-events: none; z-index: 0;
+    filter: blur(120px);
+  }
+  .glow-1 { width: 600px; height: 600px; background: rgba(204,255,0,0.06); top: -200px; right: -100px; }
+  .glow-2 { width: 400px; height: 400px; background: rgba(16,185,129,0.05); bottom: 100px; left: -100px; }
+
+  /* shell */
+  .shell {
+    position: relative; z-index: 1;
+    max-width: 1600px; margin: 0 auto;
+    background: var(--obsidian);
+    border-radius: 2.5rem;
+    border: 1px solid var(--glass-border);
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.5), 0 40px 80px rgba(0,0,0,0.6);
+    min-height: 100vh;
+    overflow: hidden;
+  }
+
+  /* nav */
+  nav {
+    position: sticky; top: 0; z-index: 100;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 1.25rem 2rem;
+    background: rgba(12,12,12,0.8);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--glass-border);
+  }
+
+  .logo {
+    display: flex; align-items: center; gap: 0.75rem;
+  }
+  .logo-box {
+    width: 36px; height: 36px; border-radius: 10px;
+    background: var(--lime); display: flex; align-items: center; justify-content: center;
+    font-family: 'JetBrains Mono', monospace; font-weight: 500;
+    color: #000; font-size: 14px;
+  }
+  .logo-text { font-weight: 700; font-size: 16px; letter-spacing: -0.04em; }
+  .logo-text span { color: var(--lime); }
+
+  .nav-pill {
+    display: flex; gap: 0.25rem;
+    background: rgba(255,255,255,0.05);
+    backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-border);
+    border-radius: 9999px;
+    padding: 0.25rem;
+  }
+  .nav-pill a {
+    text-decoration: none; color: var(--text-60);
+    padding: 0.45rem 1.1rem; border-radius: 9999px;
+    font-size: 13px; font-weight: 500; transition: all 0.2s;
+    cursor: pointer;
+  }
+  .nav-pill a:hover, .nav-pill a.active { color: var(--text); background: rgba(255,255,255,0.08); }
+
+  .nav-right { display: flex; align-items: center; gap: 1rem; }
+
+  .status-tag {
+    display: flex; align-items: center; gap: 0.5rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.2em;
+    color: var(--text-60);
+  }
+  .status-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--text-30);
+    transition: background 0.3s;
+  }
+  .status-dot.ready { background: var(--lime); animation: pulse 2s infinite; }
+  .status-dot.training { background: var(--emerald); animation: pulse 0.8s infinite; }
+  .status-dot.error { background: var(--red); }
+
+  @keyframes pulse {
+    0%,100% { opacity: 1; box-shadow: 0 0 0 0 currentColor; }
+    50% { opacity: 0.7; box-shadow: 0 0 0 4px transparent; }
+  }
+
+  /* main layout */
+  main { padding: 2rem; display: flex; flex-direction: column; gap: 1.5rem; }
+
+  /* section panels */
+  .panel {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: 2rem;
+    backdrop-filter: var(--glass-blur);
+    padding: 1.75rem;
+    transition: border-color 0.3s;
+  }
+  .panel:hover { border-color: rgba(204,255,0,0.2); }
+
+  .panel-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.2em;
+    color: var(--lime); margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.5rem;
+  }
+  .panel-label::before { content: ''; width: 16px; height: 1px; background: var(--lime); }
+
+  /* bento grid */
+  .bento {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+  }
+
+  .bento-card {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: 2rem;
+    padding: 1.5rem;
+    backdrop-filter: var(--glass-blur);
+    transition: border-color 0.3s;
+  }
+  .bento-card:hover { border-color: rgba(204,255,0,0.3); }
+
+  .bento-card.accent {
+    background: var(--lime);
+    color: #000;
+    position: relative; overflow: hidden;
+  }
+  .bento-card.accent::after {
+    content: '';
+    position: absolute; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    opacity: 0.12; pointer-events: none;
+  }
+
+  .metric-val {
+    font-size: 2.75rem; font-weight: 700; letter-spacing: -0.06em;
+    line-height: 1; color: var(--text);
+  }
+  .metric-val.lime { color: var(--lime); }
+  .metric-val.black { color: #000; }
+  .metric-label { font-size: 12px; color: var(--text-60); margin-top: 0.4rem; }
+  .metric-label.black { color: rgba(0,0,0,0.6); }
+
+  /* bars visualization */
+  .bars { display: flex; align-items: flex-end; gap: 4px; height: 60px; margin-top: 1rem; }
+  .bar {
+    flex: 1; border-radius: 4px 4px 0 0;
+    background: rgba(204,255,0,0.2);
+    transition: height 0.6s cubic-bezier(0.4,0,0.2,1), background 0.3s;
+    min-height: 4px;
+  }
+  .bar.pos { background: rgba(204,255,0,0.5); }
+  .bar.neg { background: rgba(255,77,77,0.4); }
+
+  /* train section */
+  .train-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;
+  }
+
+  .field-group { display: flex; flex-direction: column; gap: 0.5rem; }
+  .field-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.15em;
+    color: var(--text-60);
+  }
+  .field-input {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--glass-border);
+    border-radius: 0.75rem;
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    padding: 0.75rem 1rem;
+    outline: none;
+    transition: border-color 0.2s;
+    width: 100%;
+  }
+  .field-input:focus { border-color: var(--lime); }
+
+  /* progress */
+  .progress-bar-wrap {
+    background: rgba(255,255,255,0.06);
+    border-radius: 9999px; height: 4px;
+    overflow: hidden; margin-top: 0.75rem;
+  }
+  .progress-bar-fill {
+    height: 100%; border-radius: 9999px;
+    background: linear-gradient(90deg, var(--emerald), var(--lime));
+    transition: width 0.5s cubic-bezier(0.4,0,0.2,1);
+    width: 0%;
+  }
+  .progress-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; color: var(--text-60); margin-top: 0.5rem;
+  }
+
+  /* predict */
+  .predict-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+
+  textarea.field-input {
+    resize: vertical; min-height: 120px;
+    font-size: 13px; line-height: 1.6;
+  }
+
+  /* result card */
+  .result-card {
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--glass-border);
+    border-radius: 1.25rem;
+    padding: 1.25rem;
+    margin-top: 1rem;
+    animation: slideIn 0.3s cubic-bezier(0.4,0,0.2,1);
+  }
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .result-card.positive { border-color: rgba(204,255,0,0.3); background: rgba(204,255,0,0.04); }
+  .result-card.negative { border-color: rgba(255,77,77,0.3); background: var(--red-faint); }
+
+  .result-badge {
+    display: inline-flex; align-items: center; gap: 0.4rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.15em;
+    padding: 0.3rem 0.8rem; border-radius: 9999px;
+  }
+  .result-badge.positive { background: rgba(204,255,0,0.15); color: var(--lime); }
+  .result-badge.negative { background: var(--red-faint); color: var(--red); }
+
+  .conf-bar-wrap { background: rgba(255,255,255,0.06); border-radius: 9999px; height: 3px; margin-top: 0.75rem; }
+  .conf-bar-fill { height: 100%; border-radius: 9999px; transition: width 0.8s cubic-bezier(0.4,0,0.2,1); }
+  .conf-bar-fill.positive { background: var(--lime); }
+  .conf-bar-fill.negative { background: var(--red); }
+
+  /* buttons */
+  .btn {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 600; font-size: 13px;
+    padding: 0.7rem 1.5rem; border-radius: 9999px;
+    cursor: pointer; border: none; transition: all 0.2s cubic-bezier(0.4,0,0.2,1);
+    text-transform: none;
+  }
+  .btn-lime {
+    background: var(--lime); color: #000;
+    box-shadow: 0 0 30px rgba(204,255,0,0.25);
+  }
+  .btn-lime:hover { transform: scale(1.04); box-shadow: 0 0 40px rgba(204,255,0,0.4); }
+  .btn-lime:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+  .btn-ghost {
+    background: rgba(255,255,255,0.05);
+    color: var(--text-60);
+    border: 1px solid var(--glass-border);
+  }
+  .btn-ghost:hover { background: rgba(255,255,255,0.09); color: var(--text); }
+
+  /* history */
+  .history-list { display: flex; flex-direction: column; gap: 0.5rem; max-height: 320px; overflow-y: auto; }
+  .history-list::-webkit-scrollbar { width: 3px; }
+  .history-list::-webkit-scrollbar-track { background: transparent; }
+  .history-list::-webkit-scrollbar-thumb { background: var(--glass-border); border-radius: 9999px; }
+
+  .history-item {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0.75rem 1rem;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--glass-border);
+    border-radius: 0.875rem;
+    gap: 1rem;
+    animation: slideIn 0.25s ease;
+  }
+  .history-text { flex: 1; font-size: 13px; color: var(--text-60); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .history-meta { display: flex; align-items: center; gap: 0.75rem; flex-shrink: 0; }
+
+  /* batch */
+  .batch-results { display: flex; flex-direction: column; gap: 0.4rem; max-height: 280px; overflow-y: auto; }
+  .batch-row {
+    display: grid; grid-template-columns: 1fr auto auto;
+    align-items: center; gap: 1rem;
+    padding: 0.6rem 0.875rem;
+    border-radius: 0.75rem;
+    background: rgba(255,255,255,0.02);
+    font-size: 12px;
+  }
+  .batch-row span:first-child { color: var(--text-60); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* tabs */
+  .tab-bar { display: flex; gap: 0.25rem; margin-bottom: 1.5rem; }
+  .tab {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em;
+    padding: 0.45rem 1rem; border-radius: 9999px;
+    cursor: pointer; color: var(--text-60);
+    border: 1px solid transparent; background: none;
+    transition: all 0.2s;
+  }
+  .tab.active { background: rgba(204,255,0,0.1); color: var(--lime); border-color: rgba(204,255,0,0.3); }
+  .tab:hover:not(.active) { color: var(--text); background: rgba(255,255,255,0.05); }
+
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* confusion matrix */
+  .cm-grid {
+    display: grid; grid-template-columns: repeat(2,1fr); gap: 4px;
+    max-width: 220px;
+  }
+  .cm-cell {
+    aspect-ratio: 1; border-radius: 0.5rem;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .cm-cell .v { font-size: 1.5rem; font-weight: 700; }
+  .cm-cell .l { font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; opacity: 0.6; margin-top: 2px; }
+
+  /* report table */
+  .report-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .report-table th {
+    font-family: 'JetBrains Mono', monospace; font-size: 9px;
+    text-transform: uppercase; letter-spacing: 0.15em;
+    color: var(--text-30); padding: 0.5rem 0.75rem; text-align: left;
+    border-bottom: 1px solid var(--glass-border);
+  }
+  .report-table td { padding: 0.5rem 0.75rem; color: var(--text-60); }
+  .report-table tr:hover td { color: var(--text); background: rgba(255,255,255,0.02); }
+
+  /* float animation */
+  @keyframes float {
+    0%,100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+  }
+  .float { animation: float 6s ease-in-out infinite; }
+
+  /* alerts */
+  .alert {
+    padding: 0.75rem 1.25rem; border-radius: 0.875rem;
+    font-size: 13px; margin-bottom: 1rem; display: none;
+  }
+  .alert.error { background: var(--red-faint); border: 1px solid rgba(255,77,77,0.3); color: var(--red); display: block; }
+  .alert.success { background: rgba(204,255,0,0.06); border: 1px solid rgba(204,255,0,0.3); color: var(--lime); display: block; }
+
+  /* section header */
+  .section-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 1.25rem;
+  }
+
+  /* responsive */
+  @media (max-width: 900px) {
+    .bento { grid-template-columns: repeat(2,1fr); }
+    .train-grid, .predict-layout { grid-template-columns: 1fr; }
+    .shell { border-radius: 0; }
+    nav .nav-pill { display: none; }
+  }
+</style>
+</head>
+<style>
+  /* ── SPLASH ───────────────────────────────────────────────────── */
+  #splash {
+    position: fixed; inset: 0; z-index: 9999;
+    background: var(--black);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    overflow: hidden;
+    cursor: ns-resize;
+    user-select: none;
+    /* curtain lift */
+    transform: translateY(0);
+    transition: transform 0.85s cubic-bezier(0.76, 0, 0.24, 1);
+  }
+  #splash.lifting {
+    transform: translateY(-100%);
+    pointer-events: none;
+  }
+
+  /* noise + grid same as body */
+  #splash::before {
+    content: '';
+    position: absolute; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    opacity: 0.04; pointer-events: none;
+  }
+  #splash::after {
+    content: '';
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+    background-size: 60px 60px;
+    pointer-events: none;
+  }
+
+  /* glow orb behind logo */
+  .splash-glow {
+    position: absolute;
+    width: 700px; height: 700px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(204,255,0,0.09) 0%, transparent 70%);
+    pointer-events: none;
+    animation: splashGlowPulse 3s ease-in-out infinite;
+  }
+  @keyframes splashGlowPulse {
+    0%,100% { transform: scale(1); opacity: 1; }
+    50%      { transform: scale(1.08); opacity: 0.7; }
+  }
+
+  .splash-content {
+    position: relative; z-index: 1;
+    display: flex; flex-direction: column;
+    align-items: center; gap: 2rem;
+    animation: splashFadeIn 0.9s cubic-bezier(0.4,0,0.2,1) both;
+  }
+  @keyframes splashFadeIn {
+    from { opacity: 0; transform: translateY(24px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .splash-logo {
+    display: flex; align-items: center; gap: 1rem;
+  }
+  .splash-logo-box {
+    width: 64px; height: 64px; border-radius: 18px;
+    background: var(--lime);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 500; color: #000; font-size: 26px;
+    box-shadow: 0 0 60px rgba(204,255,0,0.4);
+    animation: splashBoxPulse 2.5s ease-in-out infinite;
+  }
+  @keyframes splashBoxPulse {
+    0%,100% { box-shadow: 0 0 60px rgba(204,255,0,0.4); }
+    50%      { box-shadow: 0 0 100px rgba(204,255,0,0.65); }
+  }
+  .splash-logo-text {
+    font-size: 3rem; font-weight: 700; letter-spacing: -0.06em;
+  }
+  .splash-logo-text span { color: var(--lime); }
+
+  .splash-tagline {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.3em;
+    color: var(--text-30);
+    animation: splashFadeIn 1.1s 0.2s cubic-bezier(0.4,0,0.2,1) both;
+  }
+
+  /* scroll hint at bottom */
+  .splash-hint {
+    position: absolute; bottom: 3rem; left: 50%; transform: translateX(-50%);
+    z-index: 2;
+    display: flex; flex-direction: column; align-items: center; gap: 0.75rem;
+    animation: splashFadeIn 1s 0.6s cubic-bezier(0.4,0,0.2,1) both;
+  }
+  .splash-hint-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.25em;
+    color: var(--text-30);
+  }
+  .splash-arrow {
+    width: 24px; height: 36px;
+    border: 1.5px solid rgba(204,255,0,0.4);
+    border-radius: 12px;
+    display: flex; align-items: flex-start; justify-content: center;
+    padding-top: 6px;
+  }
+  .splash-arrow-dot {
+    width: 4px; height: 8px; border-radius: 9999px;
+    background: var(--lime);
+    animation: scrollDot 1.6s ease-in-out infinite;
+  }
+  @keyframes scrollDot {
+    0%   { transform: translateY(0);  opacity: 1; }
+    80%  { transform: translateY(14px); opacity: 0; }
+    100% { transform: translateY(0);  opacity: 0; }
+  }
+
+  /* curtain fold shadow at bottom edge */
+  #splash-edge {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 9998;
+    height: 0;
+    pointer-events: none;
+    overflow: visible;
+  }
+  #splash-edge::before {
+    content: '';
+    display: block;
+    height: 32px;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.5), transparent);
+    margin-top: -32px;
+  }
+</style>
+
+<!-- SPLASH SCREEN -->
+<div id="splash">
+  <div class="splash-glow"></div>
+  <div class="splash-content">
+    <div class="splash-logo">
+      <div class="splash-logo-box">S</div>
+      <span class="splash-logo-text">Sentient<span>AI</span></span>
+    </div>
+    <div class="splash-tagline">Sentiment Analysis Dashboard</div>
+  </div>
+  <div class="splash-hint">
+    <div class="splash-hint-label">Scroll up to enter</div>
+    <div class="splash-arrow">
+      <div class="splash-arrow-dot"></div>
+    </div>
+  </div>
+</div>
+<div id="splash-edge"></div>
+
+<script>
+(function() {
+  const splash = document.getElementById('splash');
+  const edge   = document.getElementById('splash-edge');
+  let dismissed = false;
+
+  function liftCurtain() {
+    if (dismissed) return;
+    dismissed = true;
+    splash.classList.add('lifting');
+    // hide edge shadow too
+    edge.style.display = 'none';
+    // after transition ends, remove from DOM so dashboard is fully interactive
+    splash.addEventListener('transitionend', () => {
+      splash.remove();
+      edge.remove();
+      document.body.style.overflow = '';
+    }, { once: true });
+  }
+
+  // Lock body scroll while splash is up
+  document.body.style.overflow = 'hidden';
+
+  // Wheel / trackpad
+  window.addEventListener('wheel', (e) => {
+    if (e.deltaY < -20) liftCurtain();   // scroll UP
+  }, { passive: true });
+
+  // Touch swipe up
+  let touchStartY = 0;
+  window.addEventListener('touchstart', (e) => {
+    touchStartY = e.touches[0].clientY;
+  }, { passive: true });
+  window.addEventListener('touchend', (e) => {
+    const dy = touchStartY - e.changedTouches[0].clientY;
+    if (dy > 40) liftCurtain();          // swipe UP
+  }, { passive: true });
+
+  // Keyboard: any key also works
+  window.addEventListener('keydown', liftCurtain, { once: true });
+
+  // Click as fallback
+  splash.addEventListener('click', liftCurtain);
+})();
+</script>
+
+<div class="glow-sphere glow-1"></div>
+<div class="glow-sphere glow-2"></div>
+
+<div class="shell">
+
+  <!-- NAV -->
+  <nav>
+    <div class="logo">
+      <div class="logo-box">S</div>
+      <span class="logo-text">Sentient<span>AI</span></span>
+    </div>
+
+    <div class="nav-pill">
+      <a class="active" onclick="showSection('dashboard')">Dashboard</a>
+      <a onclick="showSection('train')">Train</a>
+      <a onclick="showSection('analyze')">Analyze</a>
+      <a onclick="showSection('batch')">Batch</a>
+    </div>
+
+    <div class="nav-right">
+      <div class="status-tag">
+        <div class="status-dot" id="statusDot"></div>
+        <span id="statusText">initializing</span>
+      </div>
+      <button class="btn btn-lime" onclick="showSection('analyze')" style="padding:0.5rem 1.25rem;font-size:12px;">
+        Analyze →
+      </button>
+    </div>
+  </nav>
+
+  <!-- MAIN -->
+  <main>
+
+    <!-- DASHBOARD -->
+    <section id="sec-dashboard">
+      <div class="panel-label">System overview</div>
+
+      <!-- bento metrics -->
+      <div class="bento" style="margin-bottom:1rem;">
+        <!-- accuracy card (2col) -->
+        <div class="bento-card" style="grid-column:span 2;">
+          <div class="metric-label">Model accuracy</div>
+          <div class="metric-val lime" id="metricAcc">—</div>
+          <div class="bars" id="accuracyBars">
+            <!-- JS filled -->
+          </div>
+        </div>
+
+        <!-- lime accent -->
+        <div class="bento-card accent">
+          <div class="metric-label black">Predictions made</div>
+          <div class="metric-val black" id="metricTotal">0</div>
+          <div style="margin-top:0.75rem;font-family:'JetBrains Mono',monospace;font-size:10px;color:rgba(0,0,0,0.5);text-transform:uppercase;letter-spacing:0.15em;">this session</div>
+        </div>
+
+        <!-- model state -->
+        <div class="bento-card">
+          <div class="metric-label">Model state</div>
+          <div style="margin-top:0.5rem;">
+            <div id="modelStateTag" style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text-30);">not loaded</div>
+            <div style="font-size:11px;color:var(--text-30);margin-top:0.4rem;" id="trainedAt">—</div>
+          </div>
+          <div style="margin-top:1rem;display:flex;flex-direction:column;gap:4px;">
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-30);">
+              <span style="font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:0.1em;">algorithm</span>
+              <span style="color:var(--text-60);">LinearSVC</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-30);">
+              <span style="font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:0.1em;">vectorizer</span>
+              <span style="color:var(--text-60);">TF-IDF 50k</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-30);">
+              <span style="font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:0.1em;">ngrams</span>
+              <span style="color:var(--text-60);">(1,2)</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- live history preview -->
+      <div class="panel">
+        <div class="section-header">
+          <div class="panel-label" style="margin-bottom:0;">Recent predictions</div>
+          <button class="btn btn-ghost" onclick="clearHistory()" style="padding:0.4rem 1rem;font-size:12px;">Clear</button>
+        </div>
+        <div class="history-list" id="historyList">
+          <div style="color:var(--text-30);font-size:13px;text-align:center;padding:2rem;">No predictions yet</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TRAIN -->
+    <section id="sec-train" style="display:none;">
+      <div class="panel-label">Model training</div>
+      <div class="panel">
+        <div id="trainAlert"></div>
+        <div class="train-grid">
+          <div>
+            <div class="field-group">
+              <label class="field-label">CSV path</label>
+              <input class="field-input" id="csvPath" type="text"
+                value="training.1600000.processed.noemoticon.csv"
+                placeholder="path/to/dataset.csv" />
+            </div>
+            <div class="field-group" style="margin-top:1rem;">
+              <label class="field-label">Sample size (rows)</label>
+              <input class="field-input" id="sampleSize" type="number" value="200000" min="10000" max="1600000" step="10000" />
+            </div>
+            <div style="margin-top:0.5rem;font-size:11px;color:var(--text-30);">
+              Full dataset = 1,600,000 rows. 200k is a good balance of speed vs accuracy.
+            </div>
+            <div style="margin-top:1.5rem;display:flex;gap:0.75rem;">
+              <button class="btn btn-lime" id="trainBtn" onclick="startTraining()">Start training</button>
+              <button class="btn btn-ghost" onclick="showSection('dashboard')">← Back</button>
+            </div>
+          </div>
+
+          <div>
+            <div class="field-label" style="margin-bottom:0.75rem;">Training progress</div>
+            <div id="progressStatus" style="font-size:13px;color:var(--text-60);min-height:2rem;">Idle</div>
+            <div class="progress-bar-wrap">
+              <div class="progress-bar-fill" id="progressFill"></div>
+            </div>
+            <div class="progress-label" id="progressPct">0%</div>
+
+            <div id="trainResults" style="margin-top:1.5rem;display:none;">
+              <div class="field-label" style="margin-bottom:0.75rem;">Evaluation report</div>
+              <table class="report-table" id="reportTable"></table>
+
+              <div style="margin-top:1.5rem;display:flex;gap:1.5rem;align-items:flex-start;">
+                <div>
+                  <div class="field-label" style="margin-bottom:0.75rem;">Confusion matrix</div>
+                  <div class="cm-grid" id="cmGrid"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ANALYZE -->
+    <section id="sec-analyze" style="display:none;">
+      <div class="panel-label">Single / multi-text analysis</div>
+      <div class="panel">
+        <div id="analyzeAlert"></div>
+        <div class="predict-layout">
+          <div>
+            <div class="field-group">
+              <label class="field-label">Enter text to analyze</label>
+              <textarea class="field-input" id="analyzeText"
+                placeholder="Type or paste tweets, sentences, reviews…"></textarea>
+            </div>
+            <div style="margin-top:0.5rem;font-size:11px;color:var(--text-30);">
+              One sentence per analysis. Use Batch mode for multiple texts.
+            </div>
+            <div style="margin-top:1rem;display:flex;gap:0.75rem;">
+              <button class="btn btn-lime" onclick="analyzeText()">Analyze →</button>
+              <button class="btn btn-ghost" onclick="document.getElementById('analyzeText').value='';clearResult()">Clear</button>
+            </div>
+
+            <!-- quick samples -->
+            <div style="margin-top:1.25rem;">
+              <div class="field-label" style="margin-bottom:0.5rem;">Quick samples</div>
+              <div style="display:flex;flex-direction:column;gap:0.4rem;">
+                <div class="history-item" style="cursor:pointer;" onclick="setSample(this.dataset.t)" data-t="I absolutely love this product, it's amazing!">
+                  <span class="history-text">I absolutely love this product, it's amazing!</span>
+                  <span style="font-size:10px;color:var(--lime);font-family:'JetBrains Mono',monospace;">+POS</span>
+                </div>
+                <div class="history-item" style="cursor:pointer;" onclick="setSample(this.dataset.t)" data-t="This is the worst experience I've ever had. Terrible service.">
+                  <span class="history-text">This is the worst experience I've ever had. Terrible service.</span>
+                  <span style="font-size:10px;color:var(--red);font-family:'JetBrains Mono',monospace;">−NEG</span>
+                </div>
+                <div class="history-item" style="cursor:pointer;" onclick="setSample(this.dataset.t)" data-t="Just got my delivery, pretty happy with the quality overall.">
+                  <span class="history-text">Just got my delivery, pretty happy with the quality overall.</span>
+                  <span style="font-size:10px;color:var(--lime);font-family:'JetBrains Mono',monospace;">+POS</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div class="field-label" style="margin-bottom:0.75rem;">Result</div>
+            <div id="analyzeResult">
+              <div style="color:var(--text-30);font-size:13px;padding:2rem 0;">
+                Enter text and click Analyze to see the prediction.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- BATCH -->
+    <section id="sec-batch" style="display:none;">
+      <div class="panel-label">Batch analysis</div>
+      <div class="panel">
+        <div id="batchAlert"></div>
+        <div class="predict-layout">
+          <div>
+            <div class="field-group">
+              <label class="field-label">Paste texts (one per line)</label>
+              <textarea class="field-input" id="batchText" style="min-height:200px;"
+                placeholder="This was great!&#10;Absolutely terrible.&#10;Not bad at all.&#10;…"></textarea>
+            </div>
+            <div style="margin-top:1rem;display:flex;gap:0.75rem;">
+              <button class="btn btn-lime" onclick="runBatch()">Run batch →</button>
+              <button class="btn btn-ghost" onclick="document.getElementById('batchText').value='';document.getElementById('batchResults').innerHTML='';">Clear</button>
+            </div>
+          </div>
+
+          <div>
+            <div id="batchSummary" style="display:none;margin-bottom:1rem;">
+              <div style="display:flex;gap:1rem;margin-bottom:1rem;">
+                <div style="flex:1;background:rgba(204,255,0,0.06);border:1px solid rgba(204,255,0,0.2);border-radius:1rem;padding:1rem;text-align:center;">
+                  <div style="font-size:1.75rem;font-weight:700;color:var(--lime);" id="batchPos">0</div>
+                  <div style="font-size:11px;color:var(--text-30);margin-top:2px;font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:0.1em;">Positive</div>
+                </div>
+                <div style="flex:1;background:var(--red-faint);border:1px solid rgba(255,77,77,0.2);border-radius:1rem;padding:1rem;text-align:center;">
+                  <div style="font-size:1.75rem;font-weight:700;color:var(--red);" id="batchNeg">0</div>
+                  <div style="font-size:11px;color:var(--text-30);margin-top:2px;font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:0.1em;">Negative</div>
+                </div>
+              </div>
+            </div>
+            <div class="field-label" style="margin-bottom:0.75rem;">Results</div>
+            <div class="batch-results" id="batchResults">
+              <div style="color:var(--text-30);font-size:13px;padding:1rem 0;">Run a batch to see results here.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script>
+const API = '';  // same origin via Flask
+
+// ── state ────────────────────────────────────────────────────────────────────
+let sessionTotal = 0;
+let pollInterval = null;
+
+// ── nav ──────────────────────────────────────────────────────────────────────
+function showSection(name) {
+  ['dashboard','train','analyze','batch'].forEach(s => {
+    document.getElementById('sec-' + s).style.display = s === name ? '' : 'none';
+  });
+  document.querySelectorAll('.nav-pill a').forEach((a,i) => {
+    const names = ['dashboard','train','analyze','batch'];
+    a.classList.toggle('active', names[i] === name);
+  });
+  if (name === 'dashboard') loadHistory();
+}
+
+// ── status polling ────────────────────────────────────────────────────────────
+async function pollStatus() {
+  try {
+    const r = await fetch(API + '/api/status');
+    const d = await r.json();
+    updateStatusUI(d);
+  } catch(e) {}
+}
+
+function updateStatusUI(d) {
+  const dot = document.getElementById('statusDot');
+  const txt = document.getElementById('statusText');
+  dot.className = 'status-dot ' + (d.state === 'ready' ? 'ready' : d.state === 'training' ? 'training' : d.state === 'error' ? 'error' : '');
+  txt.textContent = d.state;
+
+  // bento metrics
+  if (d.accuracy) {
+    document.getElementById('metricAcc').textContent = d.accuracy + '%';
+    document.getElementById('metricTotal').textContent = sessionTotal;
+    document.getElementById('modelStateTag').textContent = d.state;
+    document.getElementById('modelStateTag').style.color = d.state === 'ready' ? 'var(--lime)' : 'var(--text-30)';
+    document.getElementById('trainedAt').textContent = d.trained_at || '—';
+    buildAccBars(d.accuracy);
+  }
+
+  // train section progress
+  const fill = document.getElementById('progressFill');
+  const pct = document.getElementById('progressPct');
+  const status = document.getElementById('progressStatus');
+  if (fill) {
+    fill.style.width = (d.progress || 0) + '%';
+    pct.textContent = (d.progress || 0) + '%';
+    status.textContent = d.message || '';
+  }
+
+  if (d.state === 'ready' && d.report) {
+    showTrainResults(d);
+  }
+
+  if (d.state !== 'training') {
+    document.getElementById('trainBtn').disabled = false;
+  }
+}
+
+function buildAccBars(acc) {
+  const wrap = document.getElementById('accuracyBars');
+  wrap.innerHTML = '';
+  const vals = [65,70,72,75,78,80, parseFloat(acc)];
+  const max = Math.max(...vals);
+  vals.forEach((v,i) => {
+    const b = document.createElement('div');
+    b.className = 'bar ' + (i === vals.length-1 ? 'pos' : '');
+    b.style.height = Math.round((v/max)*60) + 'px';
+    wrap.appendChild(b);
+  });
+}
+
+// ── training ─────────────────────────────────────────────────────────────────
+async function startTraining() {
+  const csvPath = document.getElementById('csvPath').value.trim();
+  const sample = parseInt(document.getElementById('sampleSize').value);
+  const alert = document.getElementById('trainAlert');
+  alert.innerHTML = '';
+  document.getElementById('trainBtn').disabled = true;
+  document.getElementById('trainResults').style.display = 'none';
+
+  try {
+    const r = await fetch(API + '/api/train', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({csv_path: csvPath, sample})
+    });
+    const d = await r.json();
+    if (!r.ok) {
+      alert.innerHTML = `<div class="alert error">${d.error}</div>`;
+      document.getElementById('trainBtn').disabled = false;
+      return;
+    }
+    alert.innerHTML = `<div class="alert success">Training started — ${sample.toLocaleString()} rows</div>`;
+  } catch(e) {
+    alert.innerHTML = `<div class="alert error">Cannot connect to Flask server. Is it running on port 5000?</div>`;
+    document.getElementById('trainBtn').disabled = false;
+  }
+}
+
+function showTrainResults(d) {
+  const wrap = document.getElementById('trainResults');
+  wrap.style.display = '';
+
+  // report table
+  const tbl = document.getElementById('reportTable');
+  const r = d.report;
+  tbl.innerHTML = `
+    <thead><tr>
+      <th>Class</th><th>Precision</th><th>Recall</th><th>F1</th><th>Support</th>
+    </tr></thead>
+    <tbody>
+      ${['0','1'].map(cl => `<tr>
+        <td style="font-family:'JetBrains Mono',monospace;color:${cl==='1'?'var(--lime)':'var(--red)'};">${cl==='1'?'Positive':'Negative'}</td>
+        <td>${pct(r[cl]?.precision)}</td>
+        <td>${pct(r[cl]?.recall)}</td>
+        <td>${pct(r[cl]?.['f1-score'])}</td>
+        <td>${Math.round(r[cl]?.support||0).toLocaleString()}</td>
+      </tr>`).join('')}
+      <tr style="border-top:1px solid var(--glass-border);">
+        <td style="color:var(--text);">Accuracy</td>
+        <td colspan="3" style="color:var(--lime);font-weight:600;">${pct(r.accuracy)}</td><td>—</td>
+      </tr>
+    </tbody>`;
+
+  // confusion matrix
+  if (d.confusion_matrix) {
+    const cm = d.confusion_matrix;
+    const cmEl = document.getElementById('cmGrid');
+    const labels = ['TN','FP','FN','TP'];
+    const colors = ['rgba(255,77,77,0.15)','rgba(255,255,255,0.05)','rgba(255,255,255,0.05)','rgba(204,255,0,0.15)'];
+    const textColors = ['var(--red)','var(--text-60)','var(--text-60)','var(--lime)'];
+    const flat = [cm[0][0], cm[0][1], cm[1][0], cm[1][1]];
+    cmEl.innerHTML = flat.map((v,i) => `
+      <div class="cm-cell" style="background:${colors[i]};padding:0.75rem;">
+        <div class="v" style="color:${textColors[i]}">${v.toLocaleString()}</div>
+        <div class="l">${labels[i]}</div>
+      </div>`).join('');
+  }
+}
+
+function pct(v) {
+  return v != null ? (v*100).toFixed(1)+'%' : '—';
+}
+
+// ── analyze ───────────────────────────────────────────────────────────────────
+function setSample(t) {
+  document.getElementById('analyzeText').value = t;
+}
+
+function clearResult() {
+  document.getElementById('analyzeResult').innerHTML = `
+    <div style="color:var(--text-30);font-size:13px;padding:2rem 0;">Enter text and click Analyze to see the prediction.</div>`;
+}
+
+async function analyzeText() {
+  const text = document.getElementById('analyzeText').value.trim();
+  const alert = document.getElementById('analyzeAlert');
+  alert.innerHTML = '';
+  if (!text) return;
+
+  const resultEl = document.getElementById('analyzeResult');
+  resultEl.innerHTML = `<div style="color:var(--text-30);font-size:13px;">Analyzing…</div>`;
+
+  try {
+    const r = await fetch(API + '/api/predict', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({texts: [text]})
+    });
+    const d = await r.json();
+    if (!r.ok) {
+      alert.innerHTML = `<div class="alert error">${d.error}</div>`;
+      resultEl.innerHTML = '';
+      return;
+    }
+    const res = d.results[0];
+    sessionTotal++;
+    document.getElementById('metricTotal').textContent = sessionTotal;
+    renderResult(res, resultEl);
+    loadHistory();
+  } catch(e) {
+    alert.innerHTML = `<div class="alert error">Cannot reach Flask server. Make sure app.py is running.</div>`;
+    resultEl.innerHTML = '';
+  }
+}
+
+function renderResult(res, el) {
+  const isPos = res.prediction === 'positive';
+  el.innerHTML = `
+    <div class="result-card ${res.prediction}">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;">
+        <div class="result-badge ${res.prediction}">${isPos ? '▲ Positive' : '▼ Negative'}</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-30);">${res.timestamp}</div>
+      </div>
+      <div style="font-size:13px;color:var(--text-60);line-height:1.6;margin-bottom:1rem;">"${escHtml(res.text)}"</div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-30);margin-bottom:4px;">
+        <span style="font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:0.1em;">Confidence</span>
+        <span style="color:${isPos ? 'var(--lime)' : 'var(--red)'};">${res.confidence}%</span>
+      </div>
+      <div class="conf-bar-wrap"><div class="conf-bar-fill ${res.prediction}" style="width:${res.confidence}%"></div></div>
+    </div>`;
+}
+
+// ── batch ────────────────────────────────────────────────────────────────────
+async function runBatch() {
+  const content = document.getElementById('batchText').value.trim();
+  const alert = document.getElementById('batchAlert');
+  alert.innerHTML = '';
+  if (!content) return;
+
+  const resultsEl = document.getElementById('batchResults');
+  resultsEl.innerHTML = `<div style="color:var(--text-30);font-size:13px;">Processing…</div>`;
+
+  try {
+    const r = await fetch(API + '/api/batch', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({content})
+    });
+    const d = await r.json();
+    if (!r.ok) {
+      alert.innerHTML = `<div class="alert error">${d.error}</div>`;
+      resultsEl.innerHTML = '';
+      return;
+    }
+    sessionTotal += d.total;
+    document.getElementById('metricTotal').textContent = sessionTotal;
+
+    document.getElementById('batchSummary').style.display = '';
+    document.getElementById('batchPos').textContent = d.positive;
+    document.getElementById('batchNeg').textContent = d.negative;
+
+    resultsEl.innerHTML = d.results.map(res => {
+      const isPos = res.prediction === 'positive';
+      return `<div class="batch-row">
+        <span>${escHtml(res.text)}</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:${isPos ? 'var(--lime)' : 'var(--red)'};">${isPos ? '+POS' : '−NEG'}</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-30);">${res.confidence}%</span>
+      </div>`;
+    }).join('');
+
+  } catch(e) {
+    alert.innerHTML = `<div class="alert error">Cannot reach Flask server.</div>`;
+    resultsEl.innerHTML = '';
+  }
+}
+
+// ── history ───────────────────────────────────────────────────────────────────
+async function loadHistory() {
+  try {
+    const r = await fetch(API + '/api/history');
+    const history = await r.json();
+    const el = document.getElementById('historyList');
+    if (!history.length) {
+      el.innerHTML = `<div style="color:var(--text-30);font-size:13px;text-align:center;padding:2rem;">No predictions yet</div>`;
+      return;
+    }
+    el.innerHTML = history.map(h => {
+      const isPos = h.prediction === 'positive';
+      return `<div class="history-item">
+        <span class="history-text">${escHtml(h.text)}</span>
+        <div class="history-meta">
+          <span class="result-badge ${h.prediction}" style="font-size:9px;">${isPos ? '+POS' : '−NEG'}</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-30);">${h.confidence}%</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-30);">${h.timestamp}</span>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) {}
+}
+
+async function clearHistory() {
+  await fetch(API + '/api/history/clear', {method: 'POST'});
+  loadHistory();
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── init ──────────────────────────────────────────────────────────────────────
+pollStatus();
+setInterval(pollStatus, 2500);
+loadHistory();
+</script>
+</body>
+</html>
